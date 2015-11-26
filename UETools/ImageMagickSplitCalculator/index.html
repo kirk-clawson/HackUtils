@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Image Split Calculator</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css" integrity="sha512-dTfge/zgoMYpP7QbHy4gWMEGsbsdZeCXz7irItjcC3sPUFtf0kuFbDz/ixG7ArTxmDjLXDmezHubeNikyKGVyQ==" crossorigin="anonymous">
+    <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.4.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/knockout/3.4.0/knockout-debug.js"></script>
+</head>
+<body>
+<div>
+    <label for="filetype">File Type:</label> <select id="filetype" data-bind="options: allFileTypes, value: selectedFileType"></select><br>
+    <label for="filename">Input File Name:</label> <input id="filename" type="text" data-bind="value: inputFilename" /><br>
+    <label for="dimensions">Input Dimensions:</label> <input id="dimensions" type="text" data-bind="value: inputDimensions" /><br>
+    <label for="splits">Number of Splits:</label> <input id="splits" type="text" data-bind="value: tileRank" /><br>
+    <span data-bind="visible: !isSplitValid()">The input dimensions is not evenly divisible by the number of splits.</span><br>
+    <label><input type="checkbox" data-bind="checked: overlapTiles" /> Calculate with overlapped pixel</label> <br>
+    <label><input type="checkbox" data-bind="checked: outputInRawFormat" /> Output in RAW format</label> <br>
+    <button id="generate" data-bind="click: onGenerateClick, enable: isSplitValid">Generate</button><br>
+    <textarea title="output" data-bind="value: commandOutput"></textarea>
+</div>
+
+<script type="text/javascript">
+    var kdc = kdc || {};
+    kdc.ViewModel = function () {
+        var self = this;
+
+        function isInt(value) {
+            return !!(typeof value === 'number' && (value % 1) === 0);
+        }
+        function getFullInputFileName() {
+            return self.inputFilename() + '.' + self.selectedFileType();
+        }
+        function getFullOutputFileName(x, y) {
+            var formatSpecifier = self.outputInRawFormat() ? 'gray:' : '';
+            var fileType = self.outputInRawFormat() ? 'r16' : self.selectedFileType();
+            return formatSpecifier + self.inputFilename() + '_x' + x + '_y' + y + '.' + fileType;
+        }
+
+        this.allFileTypes = ko.observableArray(['tif', 'png']);
+        this.selectedFileType = ko.observable(self.allFileTypes()[0]);
+        this.overlapTiles = ko.observable(true);
+        this.inputFilename = ko.observable('');
+        this.inputDimensions = ko.observable('').extend({ numeric: 0 });
+        this.tileRank = ko.observable('').extend({ numeric: 0});
+        this.outputInRawFormat = ko.observable(true);
+        this.commandOutput = ko.observable('');
+
+        this.newDimensions = ko.pureComputed(function(){
+            return self.inputDimensions() / self.tileRank();
+        });
+        this.isSplitValid = ko.pureComputed(function(){
+            return !isNaN(self.inputDimensions()) && !isNaN(self.tileRank()) && isInt(self.newDimensions());
+        });
+
+        this.displayInputDimensions = ko.pureComputed(function(){
+            return self.inputDimensions() + 'x' + self.inputDimensions();
+        });
+        this.displayOutputDimensions = ko.pureComputed(function () {
+            return self.newDimensions() + 'x' + self.newDimensions();
+        });
+
+        this.onGenerateClick = function() {
+            self.commandOutput('');
+            var commandStatic = 'convert -size ' + self.displayInputDimensions() +
+                    ' -depth 16 -extract ' + self.displayOutputDimensions();
+            var overlapAmount = self.overlapTiles() ? 1 : 0;
+            var yPos = 0;
+            var xPos;
+
+            for(var y = 0; y < self.tileRank(); ++y) {
+                xPos = 0;
+                for (var x = 0; x < self.tileRank(); ++x){
+                    var newCommand = commandStatic + '+' + xPos + '+' + yPos + ' ' + getFullInputFileName() + ' ' + getFullOutputFileName(x, y);
+                    self.commandOutput(self.commandOutput() + '\n' + newCommand);
+                    xPos = xPos + (self.newDimensions() - overlapAmount);
+                }
+                yPos = yPos + (self.newDimensions() - overlapAmount);
+            }
+        };
+    };
+
+    //stolen from http://knockoutjs.com/documentation/extenders.html
+    ko.extenders.numeric = function(target, precision) {
+        var result = ko.pureComputed({
+            read: target,
+            write: function(newValue) {
+                var current = target(),
+                        roundingMultiplier = Math.pow(10, precision),
+                        newValueAsNum = isNaN(newValue) ? 0 : parseFloat(+newValue),
+                        valueToWrite = Math.round(newValueAsNum * roundingMultiplier) / roundingMultiplier;
+                if (valueToWrite !== current) {
+                    target(valueToWrite);
+                } else {
+                    if (newValue !== current) {
+                        target.notifySubscribers(valueToWrite);
+                    }
+                }
+            }
+        }).extend({ notify: 'always' });
+        result(target());
+        return result;
+    };
+
+    $(document).ready(function(){
+        var vm = new kdc.ViewModel();
+        ko.applyBindings(vm);
+    });
+
+</script>
+</body>
+</html>
