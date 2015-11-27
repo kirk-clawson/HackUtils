@@ -21,23 +21,25 @@
                                 data-bind="options: allFileTypes, value: selectedFileType"></select>
                     </div>
                 </div>
-                <div class="form-group">
+                <div class="form-group" data-bind="validation-state: filename.validation">
                     <label for="filename" class="col-xs-2 control-label">Input File Name:</label>
                     <div class="col-xs-4">
                         <input id="filename" class="form-control" type="text" data-bind="value: inputFilename"/>
+                        <span class="help-block" data-bind="validation-message: filename.validation"></span>
                     </div>
                 </div>
-                <div class="form-group">
+                <div class="form-group" data-bind="validation-state: inputDimensions.validation">
                     <label for="dimensions" class="col-xs-2 control-label">Input Dimensions:</label>
                     <div class="col-xs-3">
                         <input id="dimensions" class="form-control" type="text" data-bind="value: inputDimensions"/>
+                        <span class="help-block" data-bind="validation-message: inputDimension.validation"></span>
                     </div>
                 </div>
-                <div class="form-group">
+                <div class="form-group" data-bind="validation-state: tileRank.validation">
                     <label for="splits" class="col-xs-2 control-label">Number of Splits:</label>
                     <div class="col-xs-3">
                         <input id="splits" class="form-control" type="text" data-bind="value: tileRank"/>
-                        <span class="help-block" data-bind="visible: !isSplitValid()">The input dimensions is not evenly divisible by the number of splits.</span>
+                        <span class="help-block" data-bind="validation-message: tileRank.validation">The input dimensions is not evenly divisible by the number of splits.</span>
                     </div>
                 </div>
                 <div class="form-group">
@@ -54,7 +56,7 @@
                 </div>
                 <div class="form-group">
                     <div class="col-xs-offset-2 col-xs-10">
-                        <button id="generate" class="btn btn-default" data-bind="click: onGenerateClick, enable: isSplitValid">
+                        <button id="generate" class="btn btn-primary" data-bind="click: onGenerateClick, enable: isModelValid">
                             Generate
                         </button>
                     </div>
@@ -71,8 +73,15 @@
 
 <script type="text/javascript">
     var kdc = kdc || {};
+
+    kdc.ValidationWrapper = function(validateCallback, invalidMessage) {
+        this.validateCallback = validateCallback;
+        this.invalidMessage = invalidMessage;
+    };
+
     kdc.ViewModel = function () {
         var self = this;
+
 
         function isInt(value) {
             return !!(typeof value === 'number' && (value % 1) === 0);
@@ -88,12 +97,16 @@
             return formatSpecifier + self.inputFilename() + '_x' + x + '_y' + y + '.' + fileType;
         }
 
+        function validFileName(value) {
+            return value != undefined && value != null && value.length > 0;
+        }
+
         this.allFileTypes = ko.observableArray(['tif', 'png']);
         this.selectedFileType = ko.observable(self.allFileTypes()[0]);
         this.overlapTiles = ko.observable(true);
-        this.inputFilename = ko.observable('');
-        this.inputDimensions = ko.observable('').extend({numeric: 0});
-        this.tileRank = ko.observable('').extend({numeric: 0});
+        this.inputFilename = ko.observable('').extend({ validate: new kdc.ValidationWrapper(validFileName, 'Filename must be filled in.') });
+        this.inputDimensions = ko.observable('').extend({ numeric: 0 });
+        this.tileRank = ko.observable('').extend({ numeric: 0 });
         this.outputInRawFormat = ko.observable(true);
         this.commands = ko.observableArray([]);
 
@@ -102,7 +115,7 @@
             for(var i = 0; i < self.commands().length; ++i){
                 result = self.commands()[i] + '\n' + result;
             }
-            return result.substr(0, result.lastIndexOf('\n') - 1) //trim off last carriage return;
+            return result.substr(0, result.lastIndexOf('\n') - 1); //trim off last carriage return;
         });
 
         this.outputRows = ko.pureComputed(function () {
@@ -163,6 +176,29 @@
         }).extend({notify: 'always'});
         result(target());
         return result;
+    };
+
+    ko.extenders.validate = function (target, validator) {
+        target.validation = {};
+
+        var VALID_STATE = 'has-success';
+        var ERROR_STATE = 'has-warning';
+        var self = target.validation;
+
+        target.validation.isValid = ko.observable(true);
+        if (validator.validateCallback(target())) {
+            target.validation.isValid(true);
+        } else {
+            target.validation.isValid(false);
+        }
+
+        target.validation.state = ko.pureComputed(function () {
+            return self.isValid() ? VALID_STATE : ERROR_STATE;
+        });
+
+        target.validation.message = ko.pureComputed(function () {
+            return self.isValid() ? '' : validator.invalidMessage;
+        });
     };
 
     $(document).ready(function () {
