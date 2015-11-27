@@ -3,21 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <title>Image Split Calculator</title>
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css" integrity="sha512-dTfge/zgoMYpP7QbHy4gWMEGsbsdZeCXz7irItjcC3sPUFtf0kuFbDz/ixG7ArTxmDjLXDmezHubeNikyKGVyQ==" crossorigin="anonymous">
+    <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css"
+          integrity="sha512-dTfge/zgoMYpP7QbHy4gWMEGsbsdZeCXz7irItjcC3sPUFtf0kuFbDz/ixG7ArTxmDjLXDmezHubeNikyKGVyQ=="
+          crossorigin="anonymous">
     <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.4.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/knockout/3.4.0/knockout-debug.js"></script>
 </head>
 <body>
-<div>
-    <label for="filetype">File Type:</label> <select id="filetype" data-bind="options: allFileTypes, value: selectedFileType"></select><br>
-    <label for="filename">Input File Name:</label> <input id="filename" type="text" data-bind="value: inputFilename" /><br>
-    <label for="dimensions">Input Dimensions:</label> <input id="dimensions" type="text" data-bind="value: inputDimensions" /><br>
-    <label for="splits">Number of Splits:</label> <input id="splits" type="text" data-bind="value: tileRank" /><br>
-    <span data-bind="visible: !isSplitValid()">The input dimensions is not evenly divisible by the number of splits.</span><br>
-    <label><input type="checkbox" data-bind="checked: overlapTiles" /> Calculate with overlapped pixel</label> <br>
-    <label><input type="checkbox" data-bind="checked: outputInRawFormat" /> Output in RAW format</label> <br>
-    <button id="generate" data-bind="click: onGenerateClick, enable: isSplitValid">Generate</button><br>
-    <textarea title="output" data-bind="value: commandOutput"></textarea>
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-xs-8">
+            <div class="form-horizontal">
+                <div class="form-group">
+                    <label for="filetype" class="col-xs-2 control-label">File Type:</label>
+                    <div class="col-xs-2">
+                        <select id="filetype" class="form-control"
+                                data-bind="options: allFileTypes, value: selectedFileType"></select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="filename" class="col-xs-2 control-label">Input File Name:</label>
+                    <div class="col-xs-4">
+                        <input id="filename" class="form-control" type="text" data-bind="value: inputFilename"/>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="dimensions" class="col-xs-2 control-label">Input Dimensions:</label>
+                    <div class="col-xs-3">
+                        <input id="dimensions" class="form-control" type="text" data-bind="value: inputDimensions"/>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="splits" class="col-xs-2 control-label">Number of Splits:</label>
+                    <div class="col-xs-3">
+                        <input id="splits" class="form-control" type="text" data-bind="value: tileRank"/>
+                        <span class="help-block" data-bind="visible: !isSplitValid()">The input dimensions is not evenly divisible by the number of splits.</span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="col-xs-offset-2 col-xs-4">
+                        <div class="checkbox">
+                            <label>
+                                <input type="checkbox" data-bind="checked: overlapTiles"/> Calculate with overlapped pixel
+                            </label><br>
+                            <label>
+                                <input type="checkbox" data-bind="checked: outputInRawFormat"/> Output in RAW format
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="col-xs-offset-2 col-xs-10">
+                        <button id="generate" class="btn btn-default" data-bind="click: onGenerateClick, enable: isSplitValid">
+                            Generate
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="col-xs-offset-1 col-xs-11">
+                        <textarea class="col-xs-12" title="output" data-bind="value: commandOutput, attr: {rows: outputRows}"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script type="text/javascript">
@@ -28,9 +77,11 @@
         function isInt(value) {
             return !!(typeof value === 'number' && (value % 1) === 0);
         }
+
         function getFullInputFileName() {
             return self.inputFilename() + '.' + self.selectedFileType();
         }
+
         function getFullOutputFileName(x, y) {
             var formatSpecifier = self.outputInRawFormat() ? 'gray:' : '';
             var fileType = self.outputInRawFormat() ? 'r16' : self.selectedFileType();
@@ -41,38 +92,50 @@
         this.selectedFileType = ko.observable(self.allFileTypes()[0]);
         this.overlapTiles = ko.observable(true);
         this.inputFilename = ko.observable('');
-        this.inputDimensions = ko.observable('').extend({ numeric: 0 });
-        this.tileRank = ko.observable('').extend({ numeric: 0});
+        this.inputDimensions = ko.observable('').extend({numeric: 0});
+        this.tileRank = ko.observable('').extend({numeric: 0});
         this.outputInRawFormat = ko.observable(true);
-        this.commandOutput = ko.observable('');
+        this.commands = ko.observableArray([]);
 
-        this.newDimensions = ko.pureComputed(function(){
+        this.commandOutput = ko.pureComputed(function () {
+            var result = '';
+            for(var i = 0; i < self.commands().length; ++i){
+                result = self.commands()[i] + '\n' + result;
+            }
+            return result.substr(0, result.lastIndexOf('\n') - 1) //trim off last carriage return;
+        });
+
+        this.outputRows = ko.pureComputed(function () {
+            return self.commands().length < 3 ? 3 : self.commands().length;
+        });
+
+        this.newDimensions = ko.pureComputed(function () {
             return self.inputDimensions() / self.tileRank();
         });
-        this.isSplitValid = ko.pureComputed(function(){
+        this.isSplitValid = ko.pureComputed(function () {
             return !isNaN(self.inputDimensions()) && !isNaN(self.tileRank()) && isInt(self.newDimensions());
         });
 
-        this.displayInputDimensions = ko.pureComputed(function(){
+        this.displayInputDimensions = ko.pureComputed(function () {
             return self.inputDimensions() + 'x' + self.inputDimensions();
         });
         this.displayOutputDimensions = ko.pureComputed(function () {
             return self.newDimensions() + 'x' + self.newDimensions();
         });
 
-        this.onGenerateClick = function() {
-            self.commandOutput('');
+        this.onGenerateClick = function () {
+            self.commands([]);
             var commandStatic = 'convert -size ' + self.displayInputDimensions() +
                     ' -depth 16 -extract ' + self.displayOutputDimensions();
             var overlapAmount = self.overlapTiles() ? 1 : 0;
             var yPos = 0;
             var xPos;
 
-            for(var y = 0; y < self.tileRank(); ++y) {
+            for (var y = 0; y < self.tileRank(); ++y) {
                 xPos = 0;
-                for (var x = 0; x < self.tileRank(); ++x){
+                for (var x = 0; x < self.tileRank(); ++x) {
                     var newCommand = commandStatic + '+' + xPos + '+' + yPos + ' ' + getFullInputFileName() + ' ' + getFullOutputFileName(x, y);
-                    self.commandOutput(self.commandOutput() + '\n' + newCommand);
+                    self.commands.push(newCommand);
                     xPos = xPos + (self.newDimensions() - overlapAmount);
                 }
                 yPos = yPos + (self.newDimensions() - overlapAmount);
@@ -81,10 +144,10 @@
     };
 
     //stolen from http://knockoutjs.com/documentation/extenders.html
-    ko.extenders.numeric = function(target, precision) {
+    ko.extenders.numeric = function (target, precision) {
         var result = ko.pureComputed({
             read: target,
-            write: function(newValue) {
+            write: function (newValue) {
                 var current = target(),
                         roundingMultiplier = Math.pow(10, precision),
                         newValueAsNum = isNaN(newValue) ? 0 : parseFloat(+newValue),
@@ -97,12 +160,12 @@
                     }
                 }
             }
-        }).extend({ notify: 'always' });
+        }).extend({notify: 'always'});
         result(target());
         return result;
     };
 
-    $(document).ready(function(){
+    $(document).ready(function () {
         var vm = new kdc.ViewModel();
         ko.applyBindings(vm);
     });
