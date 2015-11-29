@@ -21,25 +21,25 @@
                                 data-bind="options: allFileTypes, value: selectedFileType"></select>
                     </div>
                 </div>
-                <div class="form-group" data-bind="validation-state: filename.validation">
+                <div class="form-group" data-bind="validationState: inputFilename.validation.state">
                     <label for="filename" class="col-xs-2 control-label">Input File Name:</label>
                     <div class="col-xs-4">
                         <input id="filename" class="form-control" type="text" data-bind="value: inputFilename"/>
-                        <span class="help-block" data-bind="validation-message: filename.validation"></span>
+                        <span class="help-block" data-bind="text: inputFilename.validation.message, visible: inputFilename.validation.isValid"></span>
                     </div>
                 </div>
-                <div class="form-group" data-bind="validation-state: inputDimensions.validation">
+                <div class="form-group" data-bind="validationState: inputDimensions.validation.state">
                     <label for="dimensions" class="col-xs-2 control-label">Input Dimensions:</label>
                     <div class="col-xs-3">
                         <input id="dimensions" class="form-control" type="text" data-bind="value: inputDimensions"/>
-                        <span class="help-block" data-bind="validation-message: inputDimension.validation"></span>
+                        <span class="help-block" data-bind="text: inputDimensions.validation.message, visible: inputDimensions.validation.isValid"></span>
                     </div>
                 </div>
-                <div class="form-group" data-bind="validation-state: tileRank.validation">
+                <div class="form-group" data-bind="validationState: tileRank.validation.state">
                     <label for="splits" class="col-xs-2 control-label">Number of Splits:</label>
                     <div class="col-xs-3">
                         <input id="splits" class="form-control" type="text" data-bind="value: tileRank"/>
-                        <span class="help-block" data-bind="validation-message: tileRank.validation">The input dimensions is not evenly divisible by the number of splits.</span>
+                        <span class="help-block" data-bind="text: tileRank.validation.message, visible: tileRank.validation.isValid"></span>
                     </div>
                 </div>
                 <div class="form-group">
@@ -72,6 +72,9 @@
 </div>
 
 <script type="text/javascript">
+    var VALID_STATE = 'has-success';
+    var ERROR_STATE = 'has-warning';
+
     var kdc = kdc || {};
 
     kdc.ValidationWrapper = function(validateCallback, invalidMessage) {
@@ -81,11 +84,6 @@
 
     kdc.ViewModel = function () {
         var self = this;
-
-
-        function isInt(value) {
-            return !!(typeof value === 'number' && (value % 1) === 0);
-        }
 
         function getFullInputFileName() {
             return self.inputFilename() + '.' + self.selectedFileType();
@@ -101,12 +99,20 @@
             return value != undefined && value != null && value.length > 0;
         }
 
+        function validInputDimensions(value) {
+            return value != undefined && value != null && value > 0;
+        }
+
+        function validTileRank(value) {
+            return value != undefined && value != null && value > 1;
+        }
+
         this.allFileTypes = ko.observableArray(['tif', 'png']);
         this.selectedFileType = ko.observable(self.allFileTypes()[0]);
         this.overlapTiles = ko.observable(true);
         this.inputFilename = ko.observable('').extend({ validate: new kdc.ValidationWrapper(validFileName, 'Filename must be filled in.') });
-        this.inputDimensions = ko.observable('').extend({ numeric: 0 });
-        this.tileRank = ko.observable('').extend({ numeric: 0 });
+        this.inputDimensions = ko.observable('').extend({ numeric: 0, validate: new kdc.ValidationWrapper(validInputDimensions, 'Dimensions must be a positive integer.') });
+        this.tileRank = ko.observable('').extend({ numeric: 0, validate: new kdc.ValidationWrapper(validTileRank, 'Splits must be an integer greater than 1.') });
         this.outputInRawFormat = ko.observable(true);
         this.commands = ko.observableArray([]);
 
@@ -125,15 +131,16 @@
         this.newDimensions = ko.pureComputed(function () {
             return self.inputDimensions() / self.tileRank();
         });
-        this.isSplitValid = ko.pureComputed(function () {
-            return !isNaN(self.inputDimensions()) && !isNaN(self.tileRank()) && isInt(self.newDimensions());
-        });
 
         this.displayInputDimensions = ko.pureComputed(function () {
             return self.inputDimensions() + 'x' + self.inputDimensions();
         });
         this.displayOutputDimensions = ko.pureComputed(function () {
             return self.newDimensions() + 'x' + self.newDimensions();
+        });
+
+        this.isModelValid = ko.pureComputed(function() {
+            return self.inputFilename.validation.isValid() && self.inputDimensions.validation.isValid() && self.tileRank.validation.isValid();
         });
 
         this.onGenerateClick = function () {
@@ -180,25 +187,31 @@
 
     ko.extenders.validate = function (target, validator) {
         target.validation = {};
-
-        var VALID_STATE = 'has-success';
-        var ERROR_STATE = 'has-warning';
         var self = target.validation;
 
         target.validation.isValid = ko.observable(true);
+        target.validation.state = ko.pureComputed(function () {
+            return self.isValid() ? VALID_STATE : ERROR_STATE;
+        });
+        target.validation.message = ko.pureComputed(function () {
+            return self.isValid() ? '' : validator.invalidMessage;
+        });
+
         if (validator.validateCallback(target())) {
             target.validation.isValid(true);
         } else {
             target.validation.isValid(false);
         }
+    };
 
-        target.validation.state = ko.pureComputed(function () {
-            return self.isValid() ? VALID_STATE : ERROR_STATE;
-        });
-
-        target.validation.message = ko.pureComputed(function () {
-            return self.isValid() ? '' : validator.invalidMessage;
-        });
+    ko.bindingHandlers.validationState = {
+        update: function (element, valueAccessor) {
+            var value = valueAccessor();
+            var className = ko.unwrap(value);
+            $(element).removeClass(VALID_STATE);
+            $(element).removeClass(ERROR_STATE);
+            $(element).addClass(className);
+        }
     };
 
     $(document).ready(function () {
